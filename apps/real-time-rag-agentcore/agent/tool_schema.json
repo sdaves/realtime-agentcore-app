@@ -1,0 +1,21 @@
+{
+  "name": "realtime_vector_search",
+  "description": "Search the real-time vector store for context relevant to a user query. This vector store is updated in near real-time (within 15 seconds) from live event streams. Use this tool whenever the user asks about current status, recent events, or any information that may have changed recently. Results include timestamps showing when each piece of context was indexed.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "Natural language search query to find relevant context"
+      },
+      "top_k": {
+        "type": "integer",
+        "description": "Number of results to return (default: 5, max: 20)",
+        "default": 5
+      }
+    },
+    "required": [
+      "query"
+    ]
+  }
+}
