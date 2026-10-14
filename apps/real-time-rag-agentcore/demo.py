@@ -15,7 +15,7 @@ import argparse
 import json
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import boto3
 
@@ -25,7 +25,7 @@ def push_event(kinesis, stream_name, entity_id, status):
         "event_id": f"evt-{uuid.uuid4().hex[:12]}",
         "entity_id": entity_id,
         "event_type": "order_update",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "data": {
             "status": status,
             "description": f"Order status changed to {status}",
@@ -74,7 +74,9 @@ def print_results(results, status_code):
     if not hits:
         print("    ⚠️  No results returned.")
         print("    Possible reasons:")
-        print("      - Glue job not running (start it with: aws glue start-job-run --job-name realtime-rag-streaming-job)")
+        print(
+            "      - Glue job not running (start it with: aws glue start-job-run --job-name realtime-rag-streaming-job)"
+        )
         print("      - Glue job still initialising (wait 60s after starting, then retry)")
         print("      - Micro-batch hasn't fired yet (try increasing --wait to 30)")
         print("      - OpenSearch index not created yet (Glue creates it on first batch)")
@@ -94,7 +96,9 @@ def print_results(results, status_code):
 
 def main():
     parser = argparse.ArgumentParser(description="Test the real-time RAG pipeline end-to-end")
-    parser.add_argument("--wait", type=int, default=20, help="Seconds to wait for pipeline (default: 20)")
+    parser.add_argument(
+        "--wait", type=int, default=20, help="Seconds to wait for pipeline (default: 20)"
+    )
     parser.add_argument("--region", default="us-east-1")
     args = parser.parse_args()
 
@@ -107,10 +111,10 @@ def main():
     print("=" * 60)
 
     # ---- Step 1: Push initial event ----
-    print(f"\n📤 STEP 1: Push event to Kinesis")
+    print("\n📤 STEP 1: Push event to Kinesis")
     event = push_event(kinesis, "realtime-rag-stream", entity_id, "shipped")
     print(f"    Entity:    {entity_id}")
-    print(f"    Status:    shipped")
+    print("    Status:    shipped")
     print(f"    Timestamp: {event['timestamp']}")
 
     # ---- Step 2: Wait for pipeline ----
@@ -120,7 +124,7 @@ def main():
     # ---- Step 3: Query ----
     # Use a broad semantic query that matches order update text
     query = "order shipped delivery status update"
-    print(f"\n🔍 STEP 3: Query vector search — \"{query}\"")
+    print(f'\n🔍 STEP 3: Query vector search — "{query}"')
     results, status = query_lambda(lambda_client, query)
     print_results(results, status)
 
@@ -131,14 +135,14 @@ def main():
     if found_ours:
         print(f"    ✅ Our event ({entity_id}) found in results!")
     else:
-        print(f"    ℹ️  Our specific event not in top results yet — it may need more time")
+        print("    ℹ️  Our specific event not in top results yet — it may need more time")
         print(f"       (Looking for entity_id containing: {our_entity})")
 
     # ---- Step 4: Push update ----
-    print(f"\n📤 STEP 4: Push UPDATE — same entity, new status")
+    print("\n📤 STEP 4: Push UPDATE — same entity, new status")
     event2 = push_event(kinesis, "realtime-rag-stream", entity_id, "out_for_delivery")
     print(f"    Entity:    {entity_id}")
-    print(f"    Status:    out_for_delivery  (was: shipped)")
+    print("    Status:    out_for_delivery  (was: shipped)")
     print(f"    Timestamp: {event2['timestamp']}")
 
     # ---- Step 5: Wait again ----
@@ -147,7 +151,7 @@ def main():
 
     # ---- Step 6: Query again ----
     query2 = "order out for delivery status"
-    print(f"\n🔍 STEP 6: Query again — \"{query2}\"")
+    print(f'\n🔍 STEP 6: Query again — "{query2}"')
     results2, status2 = query_lambda(lambda_client, query2)
     print_results(results2, status2)
 
@@ -164,26 +168,28 @@ def main():
         latest1 = max(hits1, key=lambda r: r.get("timestamp", ""))
         latest2 = max(hits2, key=lambda r: r.get("timestamp", ""))
 
-        print(f"\n    Query 1 (shipped) — freshest result:")
+        print("\n    Query 1 (shipped) — freshest result:")
         print(f"      Entity:    {latest1.get('entity_id', 'N/A')}")
         print(f"      Text:      {latest1.get('text', '')[:80]}")
         print(f"      Timestamp: {latest1.get('timestamp', 'N/A')}")
 
-        print(f"\n    Query 2 (out for delivery) — freshest result:")
+        print("\n    Query 2 (out for delivery) — freshest result:")
         print(f"      Entity:    {latest2.get('entity_id', 'N/A')}")
         print(f"      Text:      {latest2.get('text', '')[:80]}")
         print(f"      Timestamp: {latest2.get('timestamp', 'N/A')}")
 
-        print(f"\n    ✅ Pipeline is live — vectors are queryable within seconds of ingestion.")
-        print(f"    The vector store contains real-time event data, not batch snapshots.")
+        print("\n    ✅ Pipeline is live — vectors are queryable within seconds of ingestion.")
+        print("    The vector store contains real-time event data, not batch snapshots.")
 
     elif not hits1 and not hits2:
         print("\n    ❌ No results from either query.")
         print("    Is the Glue job running? Check with:")
         print("      aws glue get-job-runs --job-name realtime-rag-streaming-job --max-results 1")
     else:
-        print(f"\n    ⚠️  Partial results — first query: {len(hits1)} hits, second: {len(hits2)} hits")
-        print(f"    Pipeline may need more time. Try: python demo.py --wait 30")
+        print(
+            f"\n    ⚠️  Partial results — first query: {len(hits1)} hits, second: {len(hits2)} hits"
+        )
+        print("    Pipeline may need more time. Try: python demo.py --wait 30")
 
     print(f"\n    Entity tested: {entity_id}")
     print(f"    Pipeline window: ~{args.wait}s")

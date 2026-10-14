@@ -28,9 +28,9 @@ Output (to agent):
 """
 
 import json
+import logging
 import os
 import time
-import logging
 
 import boto3
 from botocore.config import Config as BotoConfig
@@ -79,11 +79,13 @@ def generate_query_embedding(text: str) -> list:
         modelId=EMBEDDING_MODEL_ID,
         contentType="application/json",
         accept="application/json",
-        body=json.dumps({
-            "inputText": text[:8000],
-            "dimensions": 1024,
-            "normalize": True,
-        }),
+        body=json.dumps(
+            {
+                "inputText": text[:8000],
+                "dimensions": 1024,
+                "normalize": True,
+            }
+        ),
     )
     result = json.loads(response["body"].read())
     return result["embedding"]
@@ -108,14 +110,16 @@ def search_vectors(embedding: list, top_k: int = 5) -> list:
 
     results = []
     for hit in response["hits"]["hits"]:
-        results.append({
-            "text": hit["_source"].get("text", ""),
-            "score": round(hit["_score"], 4),
-            "timestamp": hit["_source"].get("timestamp", ""),
-            "entity_id": hit["_source"].get("entity_id", hit["_id"]),
-            "event_type": hit["_source"].get("event_type", ""),
-            "metadata": hit["_source"].get("metadata", {}),
-        })
+        results.append(
+            {
+                "text": hit["_source"].get("text", ""),
+                "score": round(hit["_score"], 4),
+                "timestamp": hit["_source"].get("timestamp", ""),
+                "entity_id": hit["_source"].get("entity_id", hit["_id"]),
+                "event_type": hit["_source"].get("event_type", ""),
+                "metadata": hit["_source"].get("metadata", {}),
+            }
+        )
 
     return results
 
@@ -144,16 +148,20 @@ def handler(event, context):
         results = search_vectors(query_embedding, top_k)
         search_ms = round((time.time() - search_start) * 1000)
 
-        logger.info(f"Query: '{query[:80]}' | {len(results)} results | embed={embed_ms}ms search={search_ms}ms")
+        logger.info(
+            f"Query: '{query[:80]}' | {len(results)} results | embed={embed_ms}ms search={search_ms}ms"
+        )
 
         return {
             "statusCode": 200,
-            "body": json.dumps({
-                "results": results,
-                "count": len(results),
-                "query_embedding_ms": embed_ms,
-                "search_ms": search_ms,
-            }),
+            "body": json.dumps(
+                {
+                    "results": results,
+                    "count": len(results),
+                    "query_embedding_ms": embed_ms,
+                    "search_ms": search_ms,
+                }
+            ),
         }
 
     except Exception as e:

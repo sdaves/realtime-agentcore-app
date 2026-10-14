@@ -11,6 +11,7 @@ Deploy with:
 """
 
 import os
+
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 from strands import Agent
 from strands.models import BedrockModel
