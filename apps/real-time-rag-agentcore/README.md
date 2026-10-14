@@ -84,7 +84,7 @@ Event Sources (IoT, API, CDC, S3)
   npm install -g aws-cdk
   cdk --version
   ```
-- **Python 3.11+**:
+- **Python 3.12**:
   ```bash
   python3 --version
   ```
@@ -98,7 +98,7 @@ Event Sources (IoT, API, CDC, S3)
 ```
 ├── cdk.json                          # CDK app config
 ├── cdk_stack.py                      # CDK infrastructure
-├── requirements.txt                  # Python dependencies
+├── pyproject.toml                    # Dependencies + tool config
 ├── agent/
 │   ├── agent.py                      # Strands agent for AgentCore Runtime
 │   └── tool_schema.json              # Vector search tool schema
@@ -125,7 +125,7 @@ cd llms/apps/real-time-rag-agentcore
 python3 -m venv .venv
 source .venv/bin/activate
 
-pip install -r requirements.txt
+pip install -e ".[infra,dev]"
 ```
 
 This installs CDK libraries, boto3, the AgentCore SDK, the AgentCore starter toolkit CLI (`agentcore`), and the Strands Agents framework.

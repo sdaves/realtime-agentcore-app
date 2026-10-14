@@ -1,0 +1,67 @@
+[project]
+name = "real-time-rag-agentcore"
+version = "0.1.0"
+description = "Real-time RAG pipeline on AWS: Kinesis -> Glue Streaming -> OpenSearch Serverless -> AgentCore Gateway and Runtime"
+readme = "README.md"
+requires-python = "==3.12.*"
+
+# Imported by the app's own code, and deployed verbatim. The streaming job
+# receives this list as Glue's additional Python modules and the search
+# function is bundled with it, so the versions are read from here rather than
+# restated at each deploy site (see cdk_stack.py).
+dependencies = [
+    "boto3==1.43.114",
+    "opensearch-py==3.2.0",
+    "requests-aws4auth==1.4.0",
+]
+
+[project.optional-dependencies]
+# Deployment only: synthesising the stack and driving the AgentCore toolkit.
+# Never shipped to Glue or Lambda.
+infra = [
+    "aws-cdk-lib==2.273.0",
+    "constructs==10.8.1",
+    "bedrock-agentcore==1.24.1",
+    "bedrock-agentcore-starter-toolkit==0.3.14",
+    "strands-agents==1.60.0",
+    "strands-agents-tools==0.8.9",
+]
+# Test tooling only. Never shipped to Glue or Lambda.
+dev = [
+    "pytest==9.1.1",
+    "ruff==0.17.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+# The app is deployed as scripts and a bundle, not installed as a library, so
+# the project itself ships no importable packages. Dependencies are the point.
+[tool.setuptools]
+packages = []
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+ignore = [
+    # The formatter owns code line length. This rule also fires on prose inside
+    # the agent's system prompt and on long log/print literals, neither of which
+    # may be re-wrapped without changing what the model or the operator sees.
+    "E501",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Glue supplies awsglue.* at runtime, and the job takes its transform helpers
+# from a wildcard import that ruff cannot resolve and that is not installable
+# here. Narrowed to explicit imports when the streaming job is extracted.
+"glue_scripts/streaming_job.py" = ["F403"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The event generator lives in scripts/ and is imported by its name; there is
+# no package to install it from yet.
+pythonpath = ["scripts"]

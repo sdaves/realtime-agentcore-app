@@ -11,7 +11,7 @@ import json
 import random
 import string
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import boto3
 
@@ -55,9 +55,10 @@ def generate_event(event_type=None, entity_id=None, status=None):
         "event_id": f"evt-{uuid.uuid4().hex[:12]}",
         "entity_id": eid,
         "event_type": etype,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "data": {
-            "status": status or (random.choice(ORDER_STATUSES) if etype == "order_update" else "active"),
+            "status": status
+            or (random.choice(ORDER_STATUSES) if etype == "order_update" else "active"),
             "description": random.choice(DESCRIPTIONS.get(etype, ["Event occurred"])),
             "metadata": {},
         },
@@ -83,8 +84,12 @@ def generate_event(event_type=None, entity_id=None, status=None):
 def main():
     parser = argparse.ArgumentParser(description="Push test events to Kinesis")
     parser.add_argument("--count", type=int, default=10, help="Number of events to generate")
-    parser.add_argument("--stream", type=str, default="realtime-rag-stream", help="Kinesis stream name")
-    parser.add_argument("--type", type=str, default=None, help="Event type (order_update, inventory_change, etc.)")
+    parser.add_argument(
+        "--stream", type=str, default="realtime-rag-stream", help="Kinesis stream name"
+    )
+    parser.add_argument(
+        "--type", type=str, default=None, help="Event type (order_update, inventory_change, etc.)"
+    )
     parser.add_argument("--entity-id", type=str, default=None, help="Specific entity ID")
     parser.add_argument("--status", type=str, default=None, help="Specific status value")
     parser.add_argument("--region", type=str, default=None, help="AWS region")
@@ -95,16 +100,18 @@ def main():
     print(f"Generating {args.count} events → Kinesis stream '{args.stream}'")
 
     records = []
-    for i in range(args.count):
+    for _ in range(args.count):
         event = generate_event(
             event_type=args.type,
             entity_id=args.entity_id,
             status=args.status,
         )
-        records.append({
-            "Data": json.dumps(event).encode("utf-8"),
-            "PartitionKey": event["entity_id"],
-        })
+        records.append(
+            {
+                "Data": json.dumps(event).encode("utf-8"),
+                "PartitionKey": event["entity_id"],
+            }
+        )
 
         # Kinesis PutRecords supports max 500 records per call
         if len(records) >= 500:

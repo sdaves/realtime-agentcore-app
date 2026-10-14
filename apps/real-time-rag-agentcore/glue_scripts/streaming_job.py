@@ -20,39 +20,39 @@ Expected Kinesis record JSON:
 }
 """
 
-import sys
 import json
-import time
 import logging
+import sys
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import boto3
-from botocore.config import Config as BotoConfig
-
+from awsglue.context import GlueContext
+from awsglue.dynamicframe import DynamicFrame
+from awsglue.job import Job
 from awsglue.transforms import *
 from awsglue.utils import getResolvedOptions
-from awsglue.context import GlueContext
-from awsglue.job import Job
-from awsglue.dynamicframe import DynamicFrame
+from botocore.config import Config as BotoConfig
+from opensearchpy import OpenSearch, RequestsHttpConnection
 from pyspark.context import SparkContext
-from pyspark.sql.functions import col, from_json, get_json_object
-from pyspark.sql.types import (
-    StructType, StructField, StringType, MapType,
-)
+from requests_aws4auth import AWS4Auth
 
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
-args = getResolvedOptions(sys.argv, [
-    "JOB_NAME",
-    "kinesis_stream_name",
-    "opensearch_endpoint",
-    "opensearch_index",
-    "embedding_model_id",
-    "aws_region",
-    "window_size",
-    "TempDir",
-])
+args = getResolvedOptions(
+    sys.argv,
+    [
+        "JOB_NAME",
+        "kinesis_stream_name",
+        "opensearch_endpoint",
+        "opensearch_index",
+        "embedding_model_id",
+        "aws_region",
+        "window_size",
+        "TempDir",
+    ],
+)
 
 STREAM_NAME = args["kinesis_stream_name"]
 OPENSEARCH_ENDPOINT = args["opensearch_endpoint"]
@@ -74,9 +74,6 @@ bedrock_client = boto3.client(
 )
 
 # OpenSearch client with SigV4
-from opensearchpy import OpenSearch, RequestsHttpConnection
-from requests_aws4auth import AWS4Auth
-
 session = boto3.Session()
 credentials = session.get_credentials().get_frozen_credentials()
 awsauth = AWS4Auth(
@@ -108,11 +105,13 @@ def generate_embedding(text):
             modelId=EMBEDDING_MODEL_ID,
             contentType="application/json",
             accept="application/json",
-            body=json.dumps({
-                "inputText": text[:8000],
-                "dimensions": 1024,
-                "normalize": True,
-            }),
+            body=json.dumps(
+                {
+                    "inputText": text[:8000],
+                    "dimensions": 1024,
+                    "normalize": True,
+                }
+            ),
         )
         result = json.loads(response["body"].read())
         return result["embedding"]
@@ -126,8 +125,7 @@ def batch_generate_embeddings(texts, max_workers=10):
     embeddings = [None] * len(texts)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_idx = {
-            executor.submit(generate_embedding, text): idx
-            for idx, text in enumerate(texts)
+            executor.submit(generate_embedding, text): idx for idx, text in enumerate(texts)
         }
         for future in as_completed(future_to_idx):
             idx = future_to_idx[future]
@@ -209,21 +207,22 @@ def upsert_to_opensearch(documents):
             continue
 
         bulk_body.append({"index": {"_index": INDEX_NAME}})
-        bulk_body.append({
-            "embedding": doc["embedding"],
-            "text": doc["text"],
-            "entity_id": doc.get("entity_id", ""),
-            "metadata": doc.get("metadata", {}),
-            "timestamp": doc["timestamp"],
-            "event_type": doc.get("event_type", "unknown"),
-        })
+        bulk_body.append(
+            {
+                "embedding": doc["embedding"],
+                "text": doc["text"],
+                "entity_id": doc.get("entity_id", ""),
+                "metadata": doc.get("metadata", {}),
+                "timestamp": doc["timestamp"],
+                "event_type": doc.get("event_type", "unknown"),
+            }
+        )
 
     if bulk_body:
         try:
             response = os_client.bulk(body=bulk_body)
             errors = [
-                item for item in response.get("items", [])
-                if item.get("index", {}).get("error")
+                item for item in response.get("items", []) if item.get("index", {}).get("error")
             ]
             if errors:
                 logger.error(f"Bulk index errors: {errors[:3]}")
@@ -260,9 +259,7 @@ def processBatch(data_frame, batchId):
     dynamic_frame = DynamicFrame.fromDF(data_frame, glueContext, "from_kinesis")
 
     # Resolve any choice types that Glue inference may create
-    resolved = dynamic_frame.resolveChoice(specs=[
-        ("data.metadata", "cast:string")
-    ])
+    resolved = dynamic_frame.resolveChoice(specs=[("data.metadata", "cast:string")])
 
     # Convert back to DataFrame and collect
     # Print schema on first batch for debugging
@@ -279,7 +276,6 @@ def processBatch(data_frame, batchId):
             # Access fields — Glue infers these from the JSON structure
             row_dict = row.asDict(recursive=True)
 
-            event_id = row_dict.get("event_id", "")
             entity_id = row_dict.get("entity_id", "")
             event_type = row_dict.get("event_type", "")
             timestamp = row_dict.get("timestamp", "")
@@ -327,14 +323,16 @@ def processBatch(data_frame, batchId):
             # hyphens in document IDs — replace with underscores
             safe_entity_id = entity_id.replace("-", "_")
 
-            documents.append({
-                "entity_id": safe_entity_id,
-                "event_type": event_type,
-                "timestamp": timestamp,
-                "text": text,
-                "metadata": meta_dict,
-                "embedding": None,
-            })
+            documents.append(
+                {
+                    "entity_id": safe_entity_id,
+                    "event_type": event_type,
+                    "timestamp": timestamp,
+                    "text": text,
+                    "metadata": meta_dict,
+                    "embedding": None,
+                }
+            )
 
         except Exception as e:
             logger.error(f"Error processing row: {e}")
@@ -361,9 +359,7 @@ def processBatch(data_frame, batchId):
     upsert_to_opensearch(deduped)
 
     batch_duration = time.time() - batch_start
-    logger.info(
-        f"Batch {batchId}: Processed {len(deduped)} docs in {batch_duration:.2f}s"
-    )
+    logger.info(f"Batch {batchId}: Processed {len(deduped)} docs in {batch_duration:.2f}s")
 
 
 # =============================================================================
